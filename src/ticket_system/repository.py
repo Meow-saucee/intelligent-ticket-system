@@ -189,6 +189,73 @@ class TicketRepository:
             raise NotFoundError(f"AI 建议不存在：{suggestion_id}")
         return _suggestion(row)
 
+    def review_suggestion(
+        self,
+        suggestion_id: int,
+        *,
+        action: str,
+        reviewer: str,
+        final_category: Category | None,
+        final_priority: Priority | None,
+        now: str,
+    ) -> tuple[Suggestion, Ticket]:
+        with immediate_transaction(self.connection):
+            suggestion = self.get_suggestion(suggestion_id)
+            if suggestion.status is not SuggestionStatus.PENDING:
+                raise ConflictError("AI 建议已经处理，不能重复审核")
+            row = self.connection.execute("SELECT * FROM tickets WHERE id = ?", (suggestion.ticket_id,)).fetchone()
+            if row is None:
+                raise NotFoundError(f"工单不存在：{suggestion.ticket_id}")
+            current = _ticket(row)
+            status = {"confirm": SuggestionStatus.CONFIRMED, "modify": SuggestionStatus.MODIFIED, "reject": SuggestionStatus.REJECTED}[action]
+            changed = self.connection.execute(
+                """
+                UPDATE ai_suggestions
+                SET status = ?, final_category = ?, final_priority = ?, reviewer = ?, reviewed_at = ?
+                WHERE id = ? AND status = 'pending'
+                """,
+                (
+                    status.value,
+                    final_category.value if final_category else None,
+                    final_priority.value if final_priority else None,
+                    reviewer,
+                    now,
+                    suggestion_id,
+                ),
+            )
+            if changed.rowcount != 1:
+                raise ConflictError("AI 建议已经处理，不能重复审核")
+            if action != "reject":
+                next_status = Status.TRIAGED.value if current.status is Status.NEW else current.status.value
+                self.connection.execute(
+                    "UPDATE tickets SET category = ?, priority = ?, status = ?, version = version + 1, updated_at = ? WHERE id = ?",
+                    (final_category.value, final_priority.value, next_status, now, current.id),
+                )
+            payload = json.dumps(
+                {
+                    "suggestion_id": suggestion_id,
+                    "action": action,
+                    "reviewer": reviewer,
+                    "original_category": suggestion.original_category.value if suggestion.original_category else None,
+                    "original_priority": suggestion.original_priority.value if suggestion.original_priority else None,
+                    "final_category": final_category.value if final_category else None,
+                    "final_priority": final_priority.value if final_priority else None,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            self.connection.execute(
+                "INSERT INTO audit_events(ticket_id, event_type, actor, payload, created_at) VALUES (?, ?, ?, ?, ?)",
+                (current.id, "suggestion_reviewed", reviewer, payload, now),
+            )
+            return self.get_suggestion(suggestion_id), self.get_by_id(current.id)
+
+    def get_by_id(self, ticket_id: int) -> Ticket:
+        row = self.connection.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
+        if row is None:
+            raise NotFoundError(f"工单不存在：{ticket_id}")
+        return _ticket(row)
+
     def list(self, filters: dict | None = None) -> list[Ticket]:
         filters = filters or {}
         clauses = []

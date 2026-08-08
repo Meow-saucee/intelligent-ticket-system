@@ -11,6 +11,7 @@ from .ai_client import AIConfig, OpenAICompatibleClient
 from .analysis import AnalysisService
 from .errors import AIUnavailableError, TicketSystemError
 from .repository import TicketRepository
+from .review import ReviewService
 from .service import TicketService
 
 
@@ -50,6 +51,13 @@ def build_parser() -> argparse.ArgumentParser:
     analyze = commands.add_parser("analyze")
     analyze.add_argument("public_id")
     analyze.add_argument("--prompt-version", choices=("baseline", "hardened"), default="hardened")
+
+    review = commands.add_parser("review")
+    review.add_argument("suggestion_id", type=int)
+    review.add_argument("action", choices=("confirm", "modify", "reject"))
+    review.add_argument("--reviewer", required=True)
+    review.add_argument("--category", choices=("account_access", "software", "network", "hardware", "facilities", "other"))
+    review.add_argument("--priority", choices=("P0", "P1", "P2", "P3"))
     return parser
 
 
@@ -96,6 +104,15 @@ def run(argv: list[str] | None = None) -> int:
         elif arguments.command == "analyze":
             analysis = AnalysisService(TicketRepository(connection), OpenAICompatibleClient(AIConfig.from_environment()))
             result = analysis.analyze(arguments.public_id, arguments.prompt_version)
+        elif arguments.command == "review":
+            suggestion, ticket = ReviewService(TicketRepository(connection)).review(
+                arguments.suggestion_id,
+                arguments.action,
+                arguments.reviewer,
+                arguments.category,
+                arguments.priority,
+            )
+            result = {"suggestion": suggestion, "ticket": ticket}
         else:
             result = service.change_status(
                 arguments.public_id,
