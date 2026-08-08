@@ -76,6 +76,10 @@ class AIRecommendation:
     summary: str
     reason: str
 
+    def __post_init__(self) -> None:
+        if self.category is Category.UNCLASSIFIED:
+            raise ValidationError("AI 建议分类不能是 unclassified")
+
 
 @dataclass(frozen=True)
 class Suggestion:

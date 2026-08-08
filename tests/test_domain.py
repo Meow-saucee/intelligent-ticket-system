@@ -1,6 +1,7 @@
 import unittest
 
 from ticket_system.domain import (
+    AIRecommendation,
     Category,
     CreateTicket,
     Priority,
@@ -40,6 +41,10 @@ class DomainTests(unittest.TestCase):
     def test_category_and_priority_values_are_closed(self):
         self.assertEqual(Category.HARDWARE.value, "hardware")
         self.assertEqual([item.value for item in Priority], ["P0", "P1", "P2", "P3"])
+
+    def test_ai_recommendation_rejects_unclassified_category(self):
+        with self.assertRaisesRegex(ValidationError, "unclassified"):
+            AIRecommendation(Category.UNCLASSIFIED, Priority.P2, "摘要", "原因")
 
 
 if __name__ == "__main__":
