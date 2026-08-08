@@ -18,7 +18,7 @@ from .service import TicketService
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ticket-system")
-    parser.add_argument("--db", default="tickets.db", help="SQLite 数据库路径")
+    parser.add_argument("--db", default="data/tickets.db", help="SQLite 数据库路径")
     commands = parser.add_subparsers(dest="command", required=True)
 
     commands.add_parser("init")
