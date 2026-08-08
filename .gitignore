@@ -3,6 +3,8 @@ __pycache__/
 .venv/
 .env
 .coverage
+.superpowers/
+.worktrees/
 data/*.db
 data/*.db-*
 tmp/
