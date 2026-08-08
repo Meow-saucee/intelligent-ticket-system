@@ -10,6 +10,7 @@ from .domain import CreateTicket
 from .ai_client import AIConfig, OpenAICompatibleClient
 from .analysis import AnalysisService
 from .errors import AIUnavailableError, TicketSystemError
+from .evaluation import evaluate_cases, load_cases, write_report
 from .repository import TicketRepository
 from .review import ReviewService
 from .service import TicketService
@@ -58,6 +59,11 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument("--reviewer", required=True)
     review.add_argument("--category", choices=("account_access", "software", "network", "hardware", "facilities", "other"))
     review.add_argument("--priority", choices=("P0", "P1", "P2", "P3"))
+
+    evaluate = commands.add_parser("evaluate")
+    evaluate.add_argument("--prompt-version", choices=("baseline", "hardened"), required=True)
+    evaluate.add_argument("--cases", required=True)
+    evaluate.add_argument("--output-dir", required=True)
     return parser
 
 
@@ -113,6 +119,14 @@ def run(argv: list[str] | None = None) -> int:
                 arguments.priority,
             )
             result = {"suggestion": suggestion, "ticket": ticket}
+        elif arguments.command == "evaluate":
+            config = AIConfig.from_environment()
+            report = evaluate_cases(
+                load_cases(arguments.cases),
+                OpenAICompatibleClient(config),
+                arguments.prompt_version,
+            )
+            result = {"report": str(write_report(report, arguments.output_dir)), "aggregate": report.aggregate}
         else:
             result = service.change_status(
                 arguments.public_id,
