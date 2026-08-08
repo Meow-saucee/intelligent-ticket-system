@@ -53,6 +53,24 @@ class RepositoryTests(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.connection.execute("UPDATE tickets SET status = 'invalid'")
 
+    def test_database_constraints_reject_unclassified_final_category(self):
+        ticket = self._create("A", "f1")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.connection.execute(
+                """
+                INSERT INTO ai_suggestions (
+                    ticket_id, model, prompt_version, status, created_at, final_category
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ticket.id,
+                    "model",
+                    "v1",
+                    "pending",
+                    "2026-08-08T10:00:00+00:00",
+                    "unclassified",
+                ),
+            )
     def test_schema_tables_and_index_families_exist(self):
         tables = {
             row[0]
@@ -71,6 +89,8 @@ class RepositoryTests(unittest.TestCase):
             )
         }
         self.assertTrue(any(name.startswith("idx_tickets_") for name in indexes))
+        self.assertTrue(any(name.startswith("idx_ai_suggestions_") for name in indexes))
+        self.assertTrue(any(name.startswith("idx_audit_events_") for name in indexes))
 
     def test_create_assigns_daily_public_id_and_creation_history(self):
         created = self._create("A", "f1")

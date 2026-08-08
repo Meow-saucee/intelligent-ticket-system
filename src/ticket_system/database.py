@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS ai_suggestions (
     raw_response TEXT,
     status TEXT NOT NULL CHECK (status IN ('pending', 'confirmed', 'modified', 'rejected', 'failed')),
     created_at TEXT NOT NULL CHECK (length(trim(created_at)) > 0),
-    final_category TEXT CHECK (final_category IS NULL OR final_category IN ('unclassified', 'account_access', 'software', 'network', 'hardware', 'facilities', 'other')),
+    final_category TEXT CHECK (final_category IS NULL OR final_category IN ('account_access', 'software', 'network', 'hardware', 'facilities', 'other')),
     final_priority TEXT CHECK (final_priority IS NULL OR final_priority IN ('P0', 'P1', 'P2', 'P3')),
     reviewer TEXT,
     reviewed_at TEXT,
