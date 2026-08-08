@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from .domain import Category, CreateTicket, Priority, Status, ticket_fingerprint, utc_now, validate_create
 from .errors import ValidationError
 from .repository import AuditEvent, TicketRepository
@@ -10,13 +12,22 @@ class TicketService:
     def __init__(self, repository: TicketRepository):
         self.repository = repository
 
-    def create(self, data: CreateTicket, *, seed_key: str | None = None):
+    def create(
+        self,
+        data: CreateTicket,
+        *,
+        seed_key: str | None = None,
+        now: str | None = None,
+    ):
         validated = validate_create(data)
+        timestamp = utc_now() if now is None else now
+        cutoff = (datetime.fromisoformat(timestamp) - timedelta(hours=24)).isoformat()
         return self.repository.create(
             validated,
-            utc_now(),
+            timestamp,
             ticket_fingerprint(validated),
             seed_key,
+            duplicate_cutoff=cutoff,
         )
 
     def list(self, filters: dict | None = None):
@@ -25,7 +36,14 @@ class TicketService:
     def show(self, public_id: str):
         return self.repository.get(public_id)
 
-    def change_status(self, public_id: str, target: Status | str, actor: str):
+    def change_status(
+        self,
+        public_id: str,
+        target: Status | str,
+        actor: str,
+        *,
+        expected_version: int,
+    ):
         actor = actor.strip()
         if not actor:
             raise ValidationError("操作人不能为空")
@@ -33,7 +51,13 @@ class TicketService:
             target_status = Status(target)
         except ValueError as error:
             raise ValidationError("状态无效") from error
-        return self.repository.set_status(public_id, target_status, actor, utc_now())
+        return self.repository.update_status_if_version(
+            public_id,
+            target_status,
+            actor,
+            expected_version,
+            utc_now(),
+        )
 
     def seed(self) -> dict[str, int]:
         created = 0
@@ -60,7 +84,12 @@ class TicketService:
                 (sample.category.value, ticket.id),
             )
             for next_status in _status_path(sample.status):
-                self.change_status(ticket.public_id, next_status, "seed")
+                ticket = self.change_status(
+                    ticket.public_id,
+                    next_status,
+                    "seed",
+                    expected_version=ticket.version,
+                )
             created += 1
         return {"created": created, "existing": existing}
 

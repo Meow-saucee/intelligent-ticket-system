@@ -37,11 +37,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     show = commands.add_parser("show")
     show.add_argument("public_id")
+    show.add_argument("--history", action="store_true")
 
     status = commands.add_parser("status")
     status.add_argument("public_id")
     status.add_argument("target", choices=("new", "triaged", "in_progress", "resolved", "closed"))
     status.add_argument("--actor", required=True)
+    status.add_argument("--version", required=True, type=int)
     return parser
 
 
@@ -83,8 +85,15 @@ def run(argv: list[str] | None = None) -> int:
             result = service.list(filters)
         elif arguments.command == "show":
             result = service.show(arguments.public_id)
+            if arguments.history:
+                result = {"ticket": result, "history": service.history(arguments.public_id)}
         else:
-            result = service.change_status(arguments.public_id, arguments.target, arguments.actor)
+            result = service.change_status(
+                arguments.public_id,
+                arguments.target,
+                arguments.actor,
+                expected_version=arguments.version,
+            )
         print(json.dumps(_json_value(result), ensure_ascii=False))
         return 0
     except TicketSystemError as error:
@@ -101,6 +110,8 @@ def main() -> None:
 
 
 def _json_value(value):
+    if isinstance(value, dict):
+        return {key: _json_value(item) for key, item in value.items()}
     if isinstance(value, list):
         return [_json_value(item) for item in value]
     if hasattr(value, "__dataclass_fields__"):
