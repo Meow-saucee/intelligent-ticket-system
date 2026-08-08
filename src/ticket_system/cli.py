@@ -7,7 +7,9 @@ import sys
 
 from .database import connect_database, initialize_database
 from .domain import CreateTicket
-from .errors import TicketSystemError
+from .ai_client import AIConfig, OpenAICompatibleClient
+from .analysis import AnalysisService
+from .errors import AIUnavailableError, TicketSystemError
 from .repository import TicketRepository
 from .service import TicketService
 
@@ -44,6 +46,10 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("target", choices=("new", "triaged", "in_progress", "resolved", "closed"))
     status.add_argument("--actor", required=True)
     status.add_argument("--version", required=True, type=int)
+
+    analyze = commands.add_parser("analyze")
+    analyze.add_argument("public_id")
+    analyze.add_argument("--prompt-version", choices=("baseline", "hardened"), default="hardened")
     return parser
 
 
@@ -87,6 +93,9 @@ def run(argv: list[str] | None = None) -> int:
             result = service.show(arguments.public_id)
             if arguments.history:
                 result = {"ticket": result, "history": service.history(arguments.public_id)}
+        elif arguments.command == "analyze":
+            analysis = AnalysisService(TicketRepository(connection), OpenAICompatibleClient(AIConfig.from_environment()))
+            result = analysis.analyze(arguments.public_id, arguments.prompt_version)
         else:
             result = service.change_status(
                 arguments.public_id,
@@ -98,6 +107,8 @@ def run(argv: list[str] | None = None) -> int:
         return 0
     except TicketSystemError as error:
         print(str(error), file=sys.stderr)
+        if isinstance(error, AIUnavailableError):
+            print("工单未改变", file=sys.stderr)
         return error.exit_code
     finally:
         connection.close()

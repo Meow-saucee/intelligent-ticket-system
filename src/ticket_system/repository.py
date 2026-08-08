@@ -6,7 +6,7 @@ import json
 import sqlite3
 
 from .database import immediate_transaction
-from .domain import Category, CreateTicket, Priority, Status, Ticket, ensure_transition
+from .domain import AIRecommendation, Category, CreateTicket, Priority, Status, Suggestion, SuggestionStatus, Ticket, ensure_transition
 from .errors import DuplicateTicketError, ConflictError, NotFoundError
 
 
@@ -39,6 +39,27 @@ def _ticket(row: sqlite3.Row) -> Ticket:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         seed_key=row["seed_key"],
+    )
+
+
+def _suggestion(row: sqlite3.Row) -> Suggestion:
+    return Suggestion(
+        id=row["id"],
+        ticket_id=row["ticket_id"],
+        model=row["model"],
+        prompt_version=row["prompt_version"],
+        original_category=Category(row["original_category"]) if row["original_category"] else None,
+        original_priority=Priority(row["original_priority"]) if row["original_priority"] else None,
+        summary=row["summary"],
+        reason=row["reason"],
+        raw_response=row["raw_response"],
+        status=SuggestionStatus(row["status"]),
+        created_at=row["created_at"],
+        final_category=Category(row["final_category"]) if row["final_category"] else None,
+        final_priority=Priority(row["final_priority"]) if row["final_priority"] else None,
+        reviewer=row["reviewer"],
+        reviewed_at=row["reviewed_at"],
+        failure_code=row["failure_code"],
     )
 
 
@@ -113,6 +134,60 @@ class TicketRepository:
         if row is None:
             raise NotFoundError(f"工单不存在：{public_id}")
         return _ticket(row)
+
+    def save_ai_suggestion(
+        self,
+        ticket: Ticket,
+        *,
+        model: str,
+        prompt_version: str,
+        now: str,
+        status: str,
+        recommendation: AIRecommendation | None = None,
+        raw_response: str | None = None,
+        failure_code: str | None = None,
+    ) -> Suggestion:
+        with immediate_transaction(self.connection):
+            cursor = self.connection.execute(
+                """
+                INSERT INTO ai_suggestions(
+                    ticket_id, model, prompt_version, original_category, original_priority,
+                    summary, reason, raw_response, status, created_at, failure_code
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ticket.id,
+                    model,
+                    prompt_version,
+                    recommendation.category.value if recommendation else None,
+                    recommendation.priority.value if recommendation else None,
+                    recommendation.summary if recommendation else None,
+                    recommendation.reason if recommendation else None,
+                    raw_response,
+                    status,
+                    now,
+                    failure_code,
+                ),
+            )
+            suggestion_id = cursor.lastrowid
+            event_type = "ai_analysis_failed" if status == SuggestionStatus.FAILED.value else "ai_analysis_created"
+            payload = json.dumps(
+                {"suggestion_id": suggestion_id, "status": status, "failure_code": failure_code},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            self.connection.execute(
+                "INSERT INTO audit_events(ticket_id, event_type, payload, created_at) VALUES (?, ?, ?, ?)",
+                (ticket.id, event_type, payload, now),
+            )
+            row = self.connection.execute("SELECT * FROM ai_suggestions WHERE id = ?", (suggestion_id,)).fetchone()
+            return _suggestion(row)
+
+    def get_suggestion(self, suggestion_id: int) -> Suggestion:
+        row = self.connection.execute("SELECT * FROM ai_suggestions WHERE id = ?", (suggestion_id,)).fetchone()
+        if row is None:
+            raise NotFoundError(f"AI 建议不存在：{suggestion_id}")
+        return _suggestion(row)
 
     def list(self, filters: dict | None = None) -> list[Ticket]:
         filters = filters or {}
