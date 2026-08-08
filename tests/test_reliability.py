@@ -23,11 +23,29 @@ class ReliabilityTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_duplicate_create_is_rejected_with_existing_public_id(self):
-        first = self.service.create(CreateTicket(" VPN ", " 无法连接 ", " alice "))
+        first = self.service.create(
+            CreateTicket(" VPN ", " 无法连接 ", " alice "),
+            now="2026-08-08T10:00:00+00:00",
+        )
         with self.assertRaises(DuplicateTicketError) as caught:
-            self.service.create(CreateTicket("VPN", "无法连接", "alice", "P1"))
+            self.service.create(
+                CreateTicket("VPN", "无法连接", "alice", "P1"),
+                now="2026-08-09T09:59:59+00:00",
+            )
         self.assertEqual(caught.exception.existing_id, first.public_id)
         self.assertEqual(len(self.service.list()), 1)
+
+    def test_duplicate_window_expires_after_24_hours(self):
+        self.service.create(
+            CreateTicket("VPN", "无法连接", "alice"),
+            now="2026-08-08T10:00:00+00:00",
+        )
+        created = self.service.create(
+            CreateTicket("VPN", "无法连接", "alice"),
+            now="2026-08-09T10:00:01+00:00",
+        )
+        self.assertEqual(len(self.service.list()), 2)
+        self.assertNotEqual(created.public_id, "")
 
     def test_status_machine_rejects_illegal_jump_and_records_versions(self):
         ticket = self.service.create(CreateTicket("A", "描述", "alice"))

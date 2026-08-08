@@ -12,13 +12,19 @@ class TicketService:
     def __init__(self, repository: TicketRepository):
         self.repository = repository
 
-    def create(self, data: CreateTicket, *, seed_key: str | None = None):
+    def create(
+        self,
+        data: CreateTicket,
+        *,
+        seed_key: str | None = None,
+        now: str | None = None,
+    ):
         validated = validate_create(data)
-        now = utc_now()
-        cutoff = (datetime.fromisoformat(now) - timedelta(hours=24)).isoformat()
+        timestamp = utc_now() if now is None else now
+        cutoff = (datetime.fromisoformat(timestamp) - timedelta(hours=24)).isoformat()
         return self.repository.create(
             validated,
-            now,
+            timestamp,
             ticket_fingerprint(validated),
             seed_key,
             duplicate_cutoff=cutoff,
@@ -36,7 +42,7 @@ class TicketService:
         target: Status | str,
         actor: str,
         *,
-        expected_version: int | None = None,
+        expected_version: int,
     ):
         actor = actor.strip()
         if not actor:
@@ -45,12 +51,12 @@ class TicketService:
             target_status = Status(target)
         except ValueError as error:
             raise ValidationError("状态无效") from error
-        return self.repository.set_status(
+        return self.repository.update_status_if_version(
             public_id,
             target_status,
             actor,
+            expected_version,
             utc_now(),
-            expected_version=expected_version,
         )
 
     def seed(self) -> dict[str, int]:
@@ -78,7 +84,12 @@ class TicketService:
                 (sample.category.value, ticket.id),
             )
             for next_status in _status_path(sample.status):
-                self.change_status(ticket.public_id, next_status, "seed")
+                ticket = self.change_status(
+                    ticket.public_id,
+                    next_status,
+                    "seed",
+                    expected_version=ticket.version,
+                )
             created += 1
         return {"created": created, "existing": existing}
 

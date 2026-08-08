@@ -137,23 +137,22 @@ class TicketRepository:
         ).fetchone()
         return None if row is None else _ticket(row)
 
-    def set_status(
+    def update_status_if_version(
         self,
         public_id: str,
         target: Status,
         actor: str,
+        expected_version: int,
         now: str,
-        expected_version: int | None = None,
     ) -> Ticket:
         with immediate_transaction(self.connection):
             current = self.get(public_id)
             target = Status(_value(target))
             ensure_transition(current.status, target)
-            version = current.version if expected_version is None else expected_version
-            new_version = version + 1
+            new_version = expected_version + 1
             updated = self.connection.execute(
                 "UPDATE tickets SET status = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?",
-                (target.value, now, current.id, version),
+                (target.value, now, current.id, expected_version),
             )
             if updated.rowcount != 1:
                 raise ConflictError("工单版本冲突，请刷新后重试")
@@ -162,7 +161,7 @@ class TicketRepository:
                     "actor": actor,
                     "from": current.status.value,
                     "to": target.value,
-                    "old_version": version,
+                    "old_version": expected_version,
                     "new_version": new_version,
                 },
                 ensure_ascii=False,

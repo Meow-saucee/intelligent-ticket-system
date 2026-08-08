@@ -107,10 +107,14 @@ class RepositoryTests(unittest.TestCase):
             self.repository.find_recent_duplicate("f1", "2026-08-08T10:00:01+00:00")
         )
 
-    def test_set_status_updates_version_and_history(self):
+    def test_update_status_if_version_updates_version_and_history(self):
         created = self._create("A", "f1")
-        updated = self.repository.set_status(
-            created.public_id, Status.TRIAGED, "operator", "2026-08-08T11:00:00+00:00"
+        updated = self.repository.update_status_if_version(
+            created.public_id,
+            Status.TRIAGED,
+            "operator",
+            1,
+            "2026-08-08T11:00:00+00:00",
         )
         self.assertEqual(updated.status, Status.TRIAGED)
         self.assertEqual(updated.version, 2)

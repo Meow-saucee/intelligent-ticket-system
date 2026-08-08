@@ -57,7 +57,9 @@ class TicketServiceTests(unittest.TestCase):
             ["ticket_created"],
         )
 
-        changed = self.service.change_status(created.public_id, "triaged", "operator")
+        changed = self.service.change_status(
+            created.public_id, "triaged", "operator", expected_version=1
+        )
         self.assertEqual(changed.status, Status.TRIAGED)
         self.assertEqual(changed.version, 2)
         self.assertEqual(
