@@ -7,7 +7,7 @@ import sqlite3
 
 from .database import immediate_transaction
 from .domain import Category, CreateTicket, Priority, Status, Ticket, ensure_transition
-from .errors import NotFoundError
+from .errors import DuplicateTicketError, ConflictError, NotFoundError
 
 
 @dataclass(frozen=True)
@@ -60,9 +60,14 @@ class TicketRepository:
         now: str,
         fingerprint: str,
         seed_key: str | None = None,
+        duplicate_cutoff: str | None = None,
     ) -> Ticket:
         day = now[:10].replace("-", "")
         with immediate_transaction(self.connection):
+            if duplicate_cutoff is not None:
+                duplicate = self.find_recent_duplicate(fingerprint, duplicate_cutoff)
+                if duplicate is not None:
+                    raise DuplicateTicketError(duplicate.public_id)
             sequence = self.connection.execute(
                 """
                 INSERT INTO ticket_sequences(day, value) VALUES (?, 1)
@@ -132,17 +137,34 @@ class TicketRepository:
         ).fetchone()
         return None if row is None else _ticket(row)
 
-    def set_status(self, public_id: str, target: Status, actor: str, now: str) -> Ticket:
+    def set_status(
+        self,
+        public_id: str,
+        target: Status,
+        actor: str,
+        now: str,
+        expected_version: int | None = None,
+    ) -> Ticket:
         with immediate_transaction(self.connection):
             current = self.get(public_id)
             target = Status(_value(target))
             ensure_transition(current.status, target)
-            self.connection.execute(
-                "UPDATE tickets SET status = ?, version = version + 1, updated_at = ? WHERE id = ?",
-                (target.value, now, current.id),
+            version = current.version if expected_version is None else expected_version
+            new_version = version + 1
+            updated = self.connection.execute(
+                "UPDATE tickets SET status = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?",
+                (target.value, now, current.id, version),
             )
+            if updated.rowcount != 1:
+                raise ConflictError("工单版本冲突，请刷新后重试")
             payload = json.dumps(
-                {"from": current.status.value, "to": target.value},
+                {
+                    "actor": actor,
+                    "from": current.status.value,
+                    "to": target.value,
+                    "old_version": version,
+                    "new_version": new_version,
+                },
                 ensure_ascii=False,
                 separators=(",", ":"),
             )

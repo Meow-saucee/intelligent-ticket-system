@@ -68,6 +68,36 @@ class TicketCliTests(unittest.TestCase):
         self.assertEqual(shown.returncode, 0, shown.stderr)
         self.assertEqual(json.loads(shown.stdout)["title"], "VPN 故障")
 
+    def test_status_requires_version_and_rejects_stale_version(self):
+        created = self.run_cli("create", "--title", "VPN", "--description", "无法连接", "--submitter", "alice")
+        public_id = json.loads(created.stdout)["public_id"]
+        changed = self.run_cli("status", public_id, "triaged", "--actor", "operator", "--version", "1")
+        self.assertEqual(changed.returncode, 0, changed.stderr)
+        stale = self.run_cli("status", public_id, "in_progress", "--actor", "operator", "--version", "1")
+        self.assertEqual(stale.returncode, 3)
+        self.assertIn("版本冲突", stale.stderr)
+
+    def test_cli_duplicate_invalid_priority_and_illegal_transition(self):
+        first = self.run_cli("create", "--title", "VPN", "--description", "无法连接", "--submitter", "alice")
+        public_id = json.loads(first.stdout)["public_id"]
+        duplicate = self.run_cli("create", "--title", "VPN", "--description", "无法连接", "--submitter", "alice", "--priority", "P1")
+        self.assertEqual(duplicate.returncode, 3)
+        self.assertIn(public_id, duplicate.stderr)
+        invalid = self.run_cli("create", "--title", "Other", "--description", "描述", "--submitter", "alice", "--priority", "P4")
+        self.assertEqual(invalid.returncode, 2)
+        illegal = self.run_cli("status", public_id, "resolved", "--actor", "operator", "--version", "1")
+        self.assertEqual(illegal.returncode, 2)
+
+    def test_show_history_wraps_ticket_and_audit_events(self):
+        created = self.run_cli("create", "--title", "VPN", "--description", "无法连接", "--submitter", "alice")
+        public_id = json.loads(created.stdout)["public_id"]
+        self.run_cli("status", public_id, "triaged", "--actor", "operator", "--version", "1")
+        shown = self.run_cli("show", public_id, "--history")
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        payload = json.loads(shown.stdout)
+        self.assertEqual(payload["ticket"]["public_id"], public_id)
+        self.assertEqual([event["event_type"] for event in payload["history"]], ["ticket_created", "status_changed"])
+
 
 if __name__ == "__main__":
     unittest.main()

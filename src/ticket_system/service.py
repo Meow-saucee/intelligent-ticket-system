@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from .domain import Category, CreateTicket, Priority, Status, ticket_fingerprint, utc_now, validate_create
 from .errors import ValidationError
 from .repository import AuditEvent, TicketRepository
@@ -12,11 +14,14 @@ class TicketService:
 
     def create(self, data: CreateTicket, *, seed_key: str | None = None):
         validated = validate_create(data)
+        now = utc_now()
+        cutoff = (datetime.fromisoformat(now) - timedelta(hours=24)).isoformat()
         return self.repository.create(
             validated,
-            utc_now(),
+            now,
             ticket_fingerprint(validated),
             seed_key,
+            duplicate_cutoff=cutoff,
         )
 
     def list(self, filters: dict | None = None):
@@ -25,7 +30,14 @@ class TicketService:
     def show(self, public_id: str):
         return self.repository.get(public_id)
 
-    def change_status(self, public_id: str, target: Status | str, actor: str):
+    def change_status(
+        self,
+        public_id: str,
+        target: Status | str,
+        actor: str,
+        *,
+        expected_version: int | None = None,
+    ):
         actor = actor.strip()
         if not actor:
             raise ValidationError("操作人不能为空")
@@ -33,7 +45,13 @@ class TicketService:
             target_status = Status(target)
         except ValueError as error:
             raise ValidationError("状态无效") from error
-        return self.repository.set_status(public_id, target_status, actor, utc_now())
+        return self.repository.set_status(
+            public_id,
+            target_status,
+            actor,
+            utc_now(),
+            expected_version=expected_version,
+        )
 
     def seed(self) -> dict[str, int]:
         created = 0
