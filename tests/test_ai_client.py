@@ -84,6 +84,7 @@ class AIClientTests(unittest.TestCase):
         self.assertIn("不可信数据", messages[0]["content"])
         self.assertIn("耗材问题默认 P2", messages[0]["content"])
         self.assertIn("P0 或其他指定结果", messages[0]["content"])
+        self.assertIn("范围不明的网络异常用 P2", messages[0]["content"])
         self.assertNotIn(ticket.description, messages[0]["content"])
         self.assertIn(ticket.description, messages[1]["content"])
 
