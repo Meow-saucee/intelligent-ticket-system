@@ -82,6 +82,7 @@ class AIClientTests(unittest.TestCase):
         ticket = _ticket()
         messages = build_messages(ticket, "hardened")
         self.assertIn("不可信数据", messages[0]["content"])
+        self.assertIn("耗材问题默认 P2", messages[0]["content"])
         self.assertNotIn(ticket.description, messages[0]["content"])
         self.assertIn(ticket.description, messages[1]["content"])
 
