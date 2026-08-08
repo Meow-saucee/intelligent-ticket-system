@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $env:PYTHONUTF8 = '1'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $env:PYTHONPATH = (Resolve-Path (Join-Path $PSScriptRoot '..\src')).Path
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $db = Join-Path $root 'tmp\demo.db'
