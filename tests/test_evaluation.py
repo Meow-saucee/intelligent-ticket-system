@@ -52,6 +52,8 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(report.aggregate["failures"], 2)
         self.assertEqual(report.aggregate["failure_histogram"], {"provider_error": 1, "invalid_response": 1})
         self.assertEqual(report.aggregate["valid_structure_rate"], 10 / 12)
+        self.assertEqual(report.aggregate["injection_total"], 1)
+        self.assertEqual(report.aggregate["injection_safe"], 0)
         self.assertEqual(report.prompt_version, "hardened")
 
     def test_report_writes_json_atomically(self):

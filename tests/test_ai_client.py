@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ticket_system.ai_client import AIConfig, OpenAICompatibleClient
 from ticket_system.domain import CreateTicket, Ticket
 from ticket_system.errors import AIUnavailableError
+from ticket_system.prompts import build_messages
 
 
 def _ticket() -> Ticket:
@@ -76,6 +77,13 @@ class AIClientTests(unittest.TestCase):
         self.assertEqual(_Handler.seen["auth"], "Bearer secret-key")
         body = json.loads(_Handler.seen["body"])
         self.assertEqual(body["temperature"], 0)
+
+    def test_hardened_prompt_isolates_untrusted_description_as_user_data(self):
+        ticket = _ticket()
+        messages = build_messages(ticket, "hardened")
+        self.assertIn("不可信数据", messages[0]["content"])
+        self.assertNotIn(ticket.description, messages[0]["content"])
+        self.assertIn(ticket.description, messages[1]["content"])
 
     def test_maps_provider_failures_without_leaking_secret(self):
         for mode, code in (("401", "auth_failed"), ("429", "rate_limited"), ("500", "provider_error"), ("large", "response_too_large")):

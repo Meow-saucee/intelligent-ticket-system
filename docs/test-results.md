@@ -4,7 +4,7 @@
 
 ```text
 python -m unittest discover -s tests -v
-Ran 46 tests ...
+Ran 47 tests ...
 OK
 
 python -m compileall -q src tests
