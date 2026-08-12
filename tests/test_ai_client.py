@@ -24,7 +24,12 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
-        self.__class__.seen = {"path": self.path, "auth": self.headers.get("Authorization"), "body": body}
+        self.__class__.seen = {
+            "path": self.path,
+            "auth": self.headers.get("Authorization"),
+            "user_agent": self.headers.get("User-Agent"),
+            "body": body,
+        }
         if self.mode == "401":
             self.send_response(401)
             self.end_headers()
@@ -75,6 +80,7 @@ class AIClientTests(unittest.TestCase):
         self.assertEqual(recommendation.category.value, "hardware")
         self.assertEqual(_Handler.seen["path"], "/v1/chat/completions")
         self.assertEqual(_Handler.seen["auth"], "Bearer secret-key")
+        self.assertEqual(_Handler.seen["user_agent"], "ticket-system/1.0")
         body = json.loads(_Handler.seen["body"])
         self.assertEqual(body["temperature"], 0)
 

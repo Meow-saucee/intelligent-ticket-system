@@ -54,7 +54,11 @@ class OpenAICompatibleClient:
             self.config.base_url + "/chat/completions",
             data=body,
             method="POST",
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.config.api_key}"},
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.config.api_key}",
+                "User-Agent": "ticket-system/1.0",
+            },
         )
         try:
             with urlopen(request, timeout=self.config.timeout) as response:
