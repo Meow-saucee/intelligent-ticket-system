@@ -1,20 +1,53 @@
+import copy
 import hashlib
 import json
+import re
 import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.export_public_evaluation_results import (
-    AGGREGATE_KEYS,
-    CASE_KEYS,
-    TOP_LEVEL_KEYS,
-    build_public_snapshot,
-)
+from scripts import export_public_evaluation_results as exporter
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+EXPORTER_SCRIPT = REPOSITORY_ROOT / "scripts" / "export_public_evaluation_results.py"
 PUBLIC_RESULTS = REPOSITORY_ROOT / "evaluation" / "results" / "moonshot-v1-8k"
 CASE_SHA256 = "a0585df6df13e28e0bb0172022f78163935775cb682f052991564480d75b584c"
+EXPECTED_TOP = {
+    "model",
+    "temperature",
+    "prompt_version",
+    "case_file_sha256",
+    "cases",
+    "aggregate",
+}
+EXPECTED_CASE = {
+    "id",
+    "expected_category",
+    "expected_priority",
+    "category",
+    "priority",
+    "valid",
+    "category_correct",
+    "priority_correct",
+    "injection_safe",
+    "failure_code",
+}
+EXPECTED_AGGREGATE = {
+    "total",
+    "valid",
+    "failures",
+    "valid_structure_rate",
+    "category_accuracy",
+    "priority_accuracy",
+    "injection_total",
+    "injection_safe",
+    "injection_resistance_rate",
+    "degradation_rate",
+    "failure_histogram",
+}
 SOURCE_REPORTS = {
     "2026-08-09-baseline.json": (
         "tmp/kimi-reports/baseline/20260808T181231.347454+0000.json",
@@ -32,8 +65,9 @@ FORBIDDEN_TEXT = (
     "raw_response",
     "headers",
     "base_url",
-    "c:\\users\\",
 )
+WINDOWS_USER_DIRECTORY = re.compile(r"[a-z]:[\\/]+users(?:[\\/]+|$)", re.IGNORECASE)
+ERROR_CODE = re.compile(r"^[a-z]+(?:_[a-z]+)*$")
 
 
 def _source_fixture(failure_histogram):
@@ -59,6 +93,45 @@ def _source_fixture(failure_histogram):
         "run_id": "must-not-be-published",
         "timestamp": "must-not-be-published",
     }
+
+
+def _complete_source_fixture():
+    source = _source_fixture({})
+    source["cases"] = [{
+        "id": "case-001",
+        "expected_category": "hardware",
+        "expected_priority": "P2",
+        "category": "hardware",
+        "priority": "P2",
+        "valid": True,
+        "category_correct": True,
+        "priority_correct": True,
+        "injection_safe": True,
+        "failure_code": "invalid_response",
+    }]
+    source["aggregate"].update({
+        "valid": 1,
+        "failures": 0,
+        "valid_structure_rate": 1.0,
+        "category_accuracy": 1.0,
+        "priority_accuracy": 1.0,
+        "injection_total": 1,
+        "injection_safe": 1,
+        "injection_resistance_rate": 1.0,
+        "degradation_rate": 0.0,
+    })
+    return source
+
+
+def _source_bytes(source):
+    return json.dumps(source, ensure_ascii=False).encode("utf-8")
+
+
+def _assert_private_data_free(test_case, value):
+    for item in _walk_public_values(value):
+        lowered = item.lower()
+        test_case.assertFalse(any(fragment in lowered for fragment in FORBIDDEN_TEXT), item)
+        test_case.assertIsNone(WINDOWS_USER_DIRECTORY.search(item), item)
 
 
 def _formal_root():
@@ -109,10 +182,21 @@ def _recompute_aggregate(cases):
 
 
 class PublicEvaluationExporterTests(unittest.TestCase):
+    def _build(self, source, date="2026-08-09"):
+        source_bytes = _source_bytes(source)
+        return exporter.build_public_snapshot(
+            source_bytes, hashlib.sha256(source_bytes).hexdigest(), date
+        )
+
+    def test_exporter_allowlist_constants_match_independent_contract(self):
+        self.assertEqual(set(exporter.TOP_LEVEL_KEYS), EXPECTED_TOP)
+        self.assertEqual(set(exporter.CASE_KEYS), EXPECTED_CASE)
+        self.assertEqual(set(exporter.AGGREGATE_KEYS), EXPECTED_AGGREGATE)
+
     def test_rejects_wrong_source_sha256(self):
         source_bytes = json.dumps(_source_fixture({"invalid_response": 1})).encode("utf-8")
         with self.assertRaisesRegex(ValueError, "source SHA-256 mismatch"):
-            build_public_snapshot(source_bytes, "0" * 64, "2026-08-09")
+            exporter.build_public_snapshot(source_bytes, "0" * 64, "2026-08-09")
 
     def test_rejects_malformed_failure_histograms(self):
         malformed = ({"Invalid_Response": 1}, {"invalid-response": 1}, {"invalid_response": True}, {"invalid_response": -1})
@@ -121,21 +205,122 @@ class PublicEvaluationExporterTests(unittest.TestCase):
                 source_bytes = json.dumps(_source_fixture(histogram)).encode("utf-8")
                 expected = hashlib.sha256(source_bytes).hexdigest()
                 with self.assertRaises(ValueError):
-                    build_public_snapshot(source_bytes, expected, "2026-08-09")
+                    exporter.build_public_snapshot(source_bytes, expected, "2026-08-09")
+
+    def test_rejects_non_scalar_and_wrong_type_public_fields(self):
+        invalid_fields = (
+            (("model",), ""),
+            (("model",), {"authorization": "secret"}),
+            (("temperature",), True),
+            (("temperature",), "zero"),
+            (("prompt_version",), ""),
+            (("case_file_sha256",), "f" * 63),
+            (("cases", 0, "id"), ""),
+            (("cases", 0, "expected_category"), ["hardware"]),
+            (("cases", 0, "expected_priority"), {"headers": "secret"}),
+            (("cases", 0, "category"), ["raw_response"]),
+            (("cases", 0, "priority"), 2),
+            (("cases", 0, "valid"), 1),
+            (("cases", 0, "category_correct"), "true"),
+            (("cases", 0, "priority_correct"), 0),
+            (("cases", 0, "injection_safe"), []),
+            (("cases", 0, "failure_code"), "Invalid-Response"),
+            (("aggregate", "total"), True),
+            (("aggregate", "valid"), -1),
+            (("aggregate", "failures"), "zero"),
+            (("aggregate", "valid_structure_rate"), True),
+            (("aggregate", "category_accuracy"), -0.1),
+            (("aggregate", "priority_accuracy"), 1.1),
+            (("aggregate", "injection_total"), False),
+            (("aggregate", "injection_safe"), -1),
+            (("aggregate", "injection_resistance_rate"), "one"),
+            (("aggregate", "degradation_rate"), 2.0),
+        )
+        for path, invalid_value in invalid_fields:
+            with self.subTest(path=path, invalid_value=invalid_value):
+                source = _complete_source_fixture()
+                target = source
+                for part in path[:-1]:
+                    target = target[part]
+                target[path[-1]] = invalid_value
+                with self.assertRaises(ValueError):
+                    self._build(source)
+        with self.assertRaises(ValueError):
+            self._build(_complete_source_fixture(), date="2026-8-9")
+
+    def test_rejects_forbidden_values_and_nested_private_fields_at_export_boundary(self):
+        private_values = (
+            (("model",), "uses authorization header"),
+            (("model",), "D://Users////alice"),
+            (("cases", 0, "category"), "Bearer token"),
+            (("cases", 0, "priority"), "raw_response"),
+            (("cases", 0, "expected_category"), "base_url"),
+            (("model",), {"headers": ["secret"]}),
+            (("cases", 0, "category"), [{"api_key": "secret"}]),
+        )
+        for path, private_value in private_values:
+            with self.subTest(path=path, private_value=private_value):
+                source = _complete_source_fixture()
+                target = source
+                for part in path[:-1]:
+                    target = target[part]
+                target[path[-1]] = private_value
+                with self.assertRaises(ValueError):
+                    self._build(source)
 
     def test_exports_only_allowlisted_fields_and_preserves_absent_success_fields(self):
         source = _source_fixture({"invalid_response": 1})
-        source_bytes = json.dumps(source).encode("utf-8")
-        public = build_public_snapshot(source_bytes, hashlib.sha256(source_bytes).hexdigest(), "2026-08-09")
+        public = self._build(source)
         self.assertEqual(
             set(public),
-            {"schema_version", "redacted_snapshot", "date", *TOP_LEVEL_KEYS},
+            {"schema_version", "redacted_snapshot", "date", *EXPECTED_TOP},
         )
         self.assertEqual(set(public["cases"][0]), {"id", "valid", "failure_code"})
-        self.assertTrue(set(public["cases"][0]).issubset(CASE_KEYS))
-        self.assertEqual(set(public["aggregate"]), set(AGGREGATE_KEYS))
+        self.assertTrue(set(public["cases"][0]).issubset(EXPECTED_CASE))
+        self.assertEqual(set(public["aggregate"]), EXPECTED_AGGREGATE)
         self.assertNotIn("category", public["cases"][0])
         self.assertNotIn("priority", public["cases"][0])
+
+
+class PublicEvaluationCliTests(unittest.TestCase):
+    def test_cli_writes_utf8_indented_snapshot_and_preserves_old_target_on_failure(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            source = _complete_source_fixture()
+            source["model"] = "模型"
+            source_path = directory / "source.json"
+            source_bytes = _source_bytes(source)
+            source_path.write_bytes(source_bytes)
+            output_path = directory / "public.json"
+            output_path.write_text("old target\n", encoding="utf-8")
+            command = [
+                sys.executable, str(EXPORTER_SCRIPT), "--source", str(source_path),
+                "--output", str(output_path), "--expected-sha256",
+                hashlib.sha256(source_bytes).hexdigest(), "--date", "2026-08-09",
+            ]
+            self.assertEqual(subprocess.run(command, capture_output=True).returncode, 0)
+            written = output_path.read_bytes()
+            self.assertIn("模型".encode("utf-8"), written)
+            self.assertNotIn(b"\\u6a21", written)
+            self.assertTrue(written.endswith(b"\n"))
+            self.assertIn(b'\n  "schema_version": 1,\n', written)
+            self.assertNotIn(b"old target", written)
+
+            prior = output_path.read_bytes()
+            bad_sha_command = [*command]
+            bad_sha_command[bad_sha_command.index("--expected-sha256") + 1] = "0" * 64
+            self.assertNotEqual(subprocess.run(bad_sha_command, capture_output=True).returncode, 0)
+            self.assertEqual(output_path.read_bytes(), prior)
+
+            invalid = _complete_source_fixture()
+            invalid["model"] = {"authorization": "secret"}
+            invalid_bytes = _source_bytes(invalid)
+            source_path.write_bytes(invalid_bytes)
+            invalid_command = [*command]
+            invalid_command[invalid_command.index("--expected-sha256") + 1] = hashlib.sha256(invalid_bytes).hexdigest()
+            self.assertNotEqual(subprocess.run(invalid_command, capture_output=True).returncode, 0)
+            self.assertEqual(output_path.read_bytes(), prior)
+            self.assertEqual(list(directory.glob(f".{output_path.name}.*.tmp")), [])
 
 
 class CheckedInPublicSnapshotsTests(unittest.TestCase):
@@ -161,13 +346,11 @@ class CheckedInPublicSnapshotsTests(unittest.TestCase):
     def test_checked_in_reports_are_allowlisted_and_private_data_free(self):
         for filename in SOURCE_REPORTS:
             snapshot = self._load_snapshot(filename)
-            self.assertEqual(set(snapshot), {"schema_version", "redacted_snapshot", "date", *TOP_LEVEL_KEYS})
-            self.assertEqual(set(snapshot["aggregate"]), set(AGGREGATE_KEYS))
+            self.assertEqual(set(snapshot), {"schema_version", "redacted_snapshot", "date", *EXPECTED_TOP})
+            self.assertEqual(set(snapshot["aggregate"]), EXPECTED_AGGREGATE)
             for case in snapshot["cases"]:
-                self.assertTrue(set(case).issubset(CASE_KEYS))
-            for value in _walk_public_values(snapshot):
-                lowered = value.lower()
-                self.assertFalse(any(fragment in lowered for fragment in FORBIDDEN_TEXT), value)
+                self.assertTrue(set(case).issubset(EXPECTED_CASE))
+            _assert_private_data_free(self, snapshot)
 
     def test_public_fields_match_locked_source_reports_when_available(self):
         formal_root = _formal_root()
@@ -179,7 +362,7 @@ class CheckedInPublicSnapshotsTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(source_bytes).hexdigest(), expected_sha256)
             source = json.loads(source_bytes.decode("utf-8"))
             snapshot = self._load_snapshot(filename)
-            self.assertEqual(snapshot["cases"], [{key: case[key] for key in CASE_KEYS if key in case} for case in source["cases"]])
+            self.assertEqual(snapshot["cases"], [{key: case[key] for key in EXPECTED_CASE if key in case} for case in source["cases"]])
             self.assertEqual(snapshot["aggregate"], source["aggregate"])
 
 
