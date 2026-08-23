@@ -5,11 +5,32 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ticket-system"
 version = "0.1.0"
+description = "Local-first Python CLI ticket system with SQLite persistence, human-reviewed AI triage, audit trails, and prompt-injection evaluation."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Meow-saucee" }]
+keywords = ["python", "sqlite", "cli", "ticket-system", "ai-triage", "human-in-the-loop", "prompt-injection", "llm-evaluation"]
 requires-python = ">=3.11"
 dependencies = []
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Office/Business",
+]
 
 [project.scripts]
 ticket-system = "ticket_system.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Meow-saucee/intelligent-ticket-system"
+Repository = "https://github.com/Meow-saucee/intelligent-ticket-system"
+Issues = "https://github.com/Meow-saucee/intelligent-ticket-system/issues"
+Documentation = "https://github.com/Meow-saucee/intelligent-ticket-system#readme"
 
 [tool.setuptools.packages.find]
 where = ["src"]
