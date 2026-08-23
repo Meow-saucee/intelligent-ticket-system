@@ -1,13 +1,14 @@
 # 贡献指南
 
-感谢参与智能工单协同系统。请先通过 Issue 说明目标或问题；代码、文档和测试改动都应保持小范围、可审查，并说明行为变化与验证方式。
+感谢参与智能工单协同系统。普通代码、文档和测试目标可先通过 Issue 说明；安全漏洞不得公开提交 Issue，请遵循[安全政策](SECURITY.md)，只能通过 GitHub Security Advisories 的 “Report a vulnerability” 私下报告。所有改动都应保持小范围、可审查，并说明行为变化与验证方式。
 
 ## 开发环境
 
 支持 Python 3.11 及以上版本。PowerShell 示例：
 
 ```powershell
-py -3.11 -m venv .venv
+python --version  # 确认版本为 Python 3.11 或更高
+python -m venv .venv
 \.venv\Scripts\Activate.ps1
 python -m pip install -e .
 ```
