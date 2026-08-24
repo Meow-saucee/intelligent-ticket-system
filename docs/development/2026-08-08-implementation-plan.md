@@ -1,5 +1,7 @@
 # Intelligent Ticket System Implementation Plan
 
+> 历史实施记录：当前用法、支持版本和安全边界以仓库根目录 README 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a persistent, testable CLI ticket system with hardened AI triage suggestions, human approval, audit history, repeatable evaluation, and complete delivery materials.
@@ -11,7 +13,7 @@
 ## Global Constraints
 
 - Production runtime dependencies are Python 3.11+ standard library only.
-- Default database is `data/tickets.db`; `--db` and `TICKET_DB_PATH` may override it.
+- Default database is `data/tickets.db`; use `--db` to override it.
 - Never store or print `AI_API_KEY`, Authorization headers, or complete environment variables.
 - AI categories are exactly `account_access`, `software`, `network`, `hardware`, `facilities`, and `other`; tickets may additionally be `unclassified` before review.
 - Priorities are exactly `P0`, `P1`, `P2`, and `P3`.
@@ -799,7 +801,8 @@ python -m unittest discover -s tests -v 2>&1 | Tee-Object -FilePath tmp/full-tes
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 python -m compileall -q src tests
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-python -m ticket_system --db tmp/final-demo.db demo
+./scripts/demo.ps1  # Windows PowerShell
+# 或：bash scripts/demo.sh  # macOS/Linux
 ```
 
 Write `docs/test-results.md` from the actual output: date, Python/SQLite versions, command, test count, `OK`, compile result, and any live-AI verification that was genuinely run. If no valid API configuration is available, explicitly state that live model output remains an operator-run step; do not invent results.

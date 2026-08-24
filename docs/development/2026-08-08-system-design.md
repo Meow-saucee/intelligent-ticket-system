@@ -10,9 +10,9 @@
 
 - Python 3.11 及以上。
 - 生产运行仅使用 Python 标准库：`argparse`、`sqlite3`、`urllib.request`、`json`、`dataclasses`、`enum` 等。
-- SQLite 单文件数据库，默认位于 `data/tickets.db`，可通过 `TICKET_DB_PATH` 覆盖。
+- SQLite 单文件数据库，默认位于 `data/tickets.db`，可通过统一 CLI 的 `--db` 选项覆盖。
 - 自动化测试使用标准库 `unittest`，不要求安装第三方包。
-- 大模型使用 OpenAI 兼容 Chat Completions HTTP 接口，通过 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 和 `AI_TIMEOUT_SECONDS` 配置。
+- 大模型使用 OpenAI 兼容 Chat Completions HTTP 接口，通过 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 和 `AI_TIMEOUT` 配置。
 
 这一方案避免原生数据库驱动和 Web 服务依赖，降低现场环境不确定性，同时保留清晰的模块边界以便测试和扩展。
 
@@ -112,7 +112,7 @@ python -m ticket_system --db data/tickets.db <command>
 - `analyze <ticket-id> [--prompt-version hardened]`：调用真实模型并保存建议或失败记录。
 - `review <suggestion-id> confirm|modify|reject --reviewer <name> [--category] [--priority]`：人工审核。
 - `evaluate --prompt-version baseline|hardened --cases evaluation/cases.json`：使用同一数据集运行评测。
-- `demo`：打印严格对应任务书验收顺序的命令，不自动调用模型或隐藏错误。
+- `scripts/demo.ps1` / `scripts/demo.sh`：按任务书验收顺序运行可重复演示，不自动伪造模型结果或隐藏错误。
 
 成功退出码为 0；输入错误为 2；不存在、重复或并发冲突为 3；AI 配置、超时、协议或输出错误为 4。所有错误向标准错误输出明确原因，核心异常不会被吞掉。
 
