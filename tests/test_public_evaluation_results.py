@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 from scripts import export_public_evaluation_results as exporter
+from scripts.export_public_evaluation_results import validate_public_snapshot
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -325,7 +326,15 @@ class PublicEvaluationCliTests(unittest.TestCase):
 
 class CheckedInPublicSnapshotsTests(unittest.TestCase):
     def _load_snapshot(self, filename):
-        return json.loads((PUBLIC_RESULTS / filename).read_text(encoding="utf-8"))
+        snapshot = json.loads((PUBLIC_RESULTS / filename).read_text(encoding="utf-8"))
+        validate_public_snapshot(snapshot)
+        return snapshot
+
+    def test_source_less_validator_rejects_nested_wrong_type_with_safe_strings(self):
+        snapshot = copy.deepcopy(self._load_snapshot("2026-08-09-hardened.json"))
+        snapshot["cases"][0]["category"] = [{"nested": "safe value"}]
+        with self.assertRaises(ValueError):
+            validate_public_snapshot(snapshot)
 
     def test_checked_in_reports_have_expected_metrics_and_recomputed_aggregates(self):
         baseline = self._load_snapshot("2026-08-09-baseline.json")

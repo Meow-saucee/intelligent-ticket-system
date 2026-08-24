@@ -130,7 +130,7 @@ def _required(mapping, key, context):
     return mapping[key]
 
 
-def _validate_public_snapshot(public):
+def validate_public_snapshot(public: dict) -> None:
     _validate_nonempty_string(public["model"], "model")
     _validate_number(public["temperature"], "temperature")
     _validate_nonempty_string(public["prompt_version"], "prompt_version")
@@ -198,7 +198,7 @@ def build_public_snapshot(source_bytes: bytes, expected_sha256: str, date: str) 
             for key in AGGREGATE_KEYS
         },
     }
-    _validate_public_snapshot(public)
+    validate_public_snapshot(public)
     return public
 
 
