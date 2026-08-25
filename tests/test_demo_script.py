@@ -7,6 +7,16 @@ import unittest
 
 
 class DemoPowerShellTests(unittest.TestCase):
+    def test_script_has_utf8_bom_for_windows_powershell_51(self):
+        project_root = Path(__file__).resolve().parents[1]
+        script_bytes = (project_root / "scripts" / "demo.ps1").read_bytes()
+
+        self.assertTrue(
+            script_bytes.startswith(b"\xef\xbb\xbf"),
+            "Windows PowerShell 5.1 needs a UTF-8 BOM to parse non-ASCII scripts "
+            "consistently on non-Chinese Windows runners.",
+        )
+
     @unittest.skipUnless(os.name == "nt", "PowerShell demo regression is Windows-only")
     def test_unexpected_python_failure_stops_demo_immediately(self):
         engines = list(
