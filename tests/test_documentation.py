@@ -26,6 +26,7 @@ MANDATORY_README_LOCAL_TARGETS = {
     "docs/development/2026-08-08-implementation-plan.md",
     "docs/development/2026-08-24-open-source-release-design.md",
     "docs/development/2026-08-24-open-source-release-plan.md",
+    "evaluation/cases.json",
     "evaluation/results/moonshot-v1-8k/2026-08-09-baseline.json",
     "evaluation/results/moonshot-v1-8k/2026-08-09-hardened.json",
 }
@@ -99,6 +100,7 @@ class DocumentationContractTests(unittest.TestCase):
 
     def test_readme_links_every_mandatory_public_target(self):
         linked_targets = set(_local_link_targets(_read(README)))
+        self.assertEqual(len(MANDATORY_README_LOCAL_TARGETS), 13)
         self.assertTrue(
             MANDATORY_README_LOCAL_TARGETS.issubset(linked_targets),
             MANDATORY_README_LOCAL_TARGETS - linked_targets,
