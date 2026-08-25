@@ -773,6 +773,7 @@ Expected: all three executions return `0`, skip real AI, and finish with the ful
 Create and verify an isolated archive install without reusing the editable environment:
 
 ```powershell
+Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
 $repoRoot = (Resolve-Path '.').Path
 $archiveRoot = Join-Path $repoRoot ('tmp\open-source-release\archive-check\' + [guid]::NewGuid().ToString('N'))
 if (Test-Path -LiteralPath $archiveRoot) { throw "Archive target already exists: $archiveRoot" }
@@ -787,6 +788,9 @@ $archivePython = Join-Path $archiveVenv 'Scripts\python.exe'
 Push-Location $tree
 try {
     Invoke-Gate 'archive install' { & $archivePython -m pip install . }
+    Invoke-Gate 'archive import origin' {
+        & $archivePython -c "import pathlib, sysconfig, ticket_system; package = pathlib.Path(ticket_system.__file__).resolve(); site_packages = pathlib.Path(sysconfig.get_paths()['purelib']).resolve(); assert package.is_relative_to(site_packages), f'{package} is not under archive venv site-packages {site_packages}'"
+    }
     Invoke-Gate 'archive entry point' { & (Join-Path $archiveVenv 'Scripts\ticket-system.exe') --help }
     Invoke-Gate 'archive tests' { & $archivePython -m unittest discover -s tests -v }
     Invoke-Gate 'archive compileall' { & $archivePython -m compileall -q src tests }
@@ -930,7 +934,7 @@ In `$notesStage`, add exact remote `https://github.com/Meow-saucee/intelligent-t
 - Replace rules: ignored `tmp/open-source-release/replace-text.txt` containing exact backslash, slash, and JSON-escaped variants of the real user path mapped to `<project-directory>`.
 
 **Interfaces:**
-- Produces: formal `main` history with unchanged public commit topology/metadata, no raw note paths, and no personal directory in any reachable blob.
+- Produces: formal `main` history with unchanged public commit topology/metadata, no raw note paths or accidental Task 4 report, and no personal directory in any reachable blob. Every public-history filtering and equivalence check excludes exactly `findings.md`, `progress.md`, `task_plan.md`, and `.superpowers/sdd/task-4-report.md`.
 
 - [ ] **Step 1: Integrate the verified release branch safely**
 
@@ -959,6 +963,7 @@ Create UTF-8 `tmp/open-source-release/replace-text.txt` with exactly three `lite
 --path findings.md
 --path progress.md
 --path task_plan.md
+--path .superpowers/sdd/task-4-report.md
 --invert-paths
 --replace-text <verified-rules-file>
 --prune-empty never
@@ -969,9 +974,9 @@ Fresh-clone the formal repository to the absent `$rehearsal` path with `--no-loc
 
 - [ ] **Step 4: Prove rehearsal equivalence**
 
-Create an ignored `verify_history_filter.py` and run it with the original formal repository, rehearsal repository, commit-map path, replacement-rules path, and expected count. For every mapped commit it must compare author/committer names and emails, raw timestamps, full commit message bytes, and parents translated through the commit map; compare complete trees after deleting only `findings.md`, `progress.md`, and `task_plan.md` and applying the three exact byte replacements to original blobs. It must fail on any other path/content/topology change.
+Create an ignored `verify_history_filter.py` and run it with the original formal repository, rehearsal repository, commit-map path, replacement-rules path, and expected count. For every mapped commit it must compare author/committer names and emails, raw timestamps, full commit message bytes, and parents translated through the commit map; compare complete trees after deleting only `findings.md`, `progress.md`, `task_plan.md`, and `.superpowers/sdd/task-4-report.md` and applying the three exact byte replacements to original blobs. It must fail on any other path/content/topology change.
 
-The same verifier must enumerate all refs and reachable blobs in the rehearsal, reject `refs/original`, `refs/replace`, unexpected remotes, note paths, the real username/path variants, and credential patterns. On a match it may print only rule name, object ID, path, byte length, entropy (where applicable), and a 12-character SHA-256 fingerprint—never matched text. Then, in separate checked gates, run the full tests, compile, install, Windows PowerShell 5.1/7 demos, discovered `bash.exe` POSIX demo, public report tests, and `git diff --check` inside the rehearsal. Store the verifier source SHA-256 and results in ignored evidence.
+The same verifier must enumerate all refs and reachable blobs in the rehearsal, reject `refs/original`, `refs/replace`, unexpected remotes, each of the four excluded public-history paths, the real username/path variants, and credential patterns. On a match it may print only rule name, object ID, path, byte length, entropy (where applicable), and a 12-character SHA-256 fingerprint—never matched text. Then, in separate checked gates, run the full tests, compile, install, Windows PowerShell 5.1/7 demos, discovered `bash.exe` POSIX demo, public report tests, and `git diff --check` inside the rehearsal. Store the verifier source SHA-256 and results in ignored evidence.
 
 - [ ] **Step 5: Apply the proven filter to the formal repository**
 

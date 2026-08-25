@@ -9,7 +9,7 @@
 ```powershell
 python --version  # 确认版本为 Python 3.11 或更高
 python -m venv .venv
-\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 python -m pip install -e .
 ```
 

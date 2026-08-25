@@ -7,6 +7,7 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 TEST_RESULTS = ROOT / "docs" / "test-results.md"
+RELEASE_PLAN = ROOT / "docs" / "development" / "2026-08-24-open-source-release-plan.md"
 PUBLIC_TEXT_FILES = (
     README,
     ROOT / "CONTRIBUTING.md",
@@ -78,6 +79,27 @@ def _local_link_targets(markdown):
 
 
 class DocumentationContractTests(unittest.TestCase):
+    def test_contributing_powershell_activation_uses_current_directory_prefix(self):
+        self.assertIn(
+            ".\\.venv\\Scripts\\Activate.ps1",
+            _read(ROOT / "CONTRIBUTING.md"),
+        )
+
+    def test_release_plan_removes_accidental_task_4_report_from_public_history(self):
+        plan = _read(RELEASE_PLAN)
+        self.assertIn("--path .superpowers/sdd/task-4-report.md", plan)
+        self.assertIn(
+            "deleting only `findings.md`, `progress.md`, `task_plan.md`, and "
+            "`.superpowers/sdd/task-4-report.md`",
+            plan,
+        )
+
+    def test_release_plan_proves_archive_import_comes_from_fresh_venv(self):
+        plan = _read(RELEASE_PLAN)
+        self.assertIn("Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue", plan)
+        self.assertIn("archive import origin", plan)
+        self.assertIn("site-packages", plan)
+
     def test_readme_uses_approved_opening_and_badges(self):
         self.assertTrue(_read(README).startswith(APPROVED_OPENING))
 
