@@ -94,6 +94,17 @@ class DocumentationContractTests(unittest.TestCase):
             plan,
         )
 
+    def test_release_plan_scopes_public_history_to_main_and_preserves_host_refs(self):
+        plan = _read(RELEASE_PLAN)
+        self.assertIn("public release scope is exactly `refs/heads/main`", plan)
+        self.assertIn("preserve all `refs/codex/**` refs unchanged", plan)
+        self.assertIn("record each local Codex ref's object ID and object type separately", plan)
+        self.assertIn("reachable from `refs/heads/main`", plan)
+        self.assertIn("excluded from the exact outgoing refspec", plan)
+        self.assertIn("git bundle create $bundle --all", plan)
+        self.assertIn("git push -u origin main", plan)
+        self.assertIn("never use `--all` or `--mirror`", plan)
+
     def test_release_plan_proves_archive_import_comes_from_fresh_venv(self):
         plan = _read(RELEASE_PLAN)
         self.assertIn("Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue", plan)

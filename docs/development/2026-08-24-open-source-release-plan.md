@@ -934,7 +934,8 @@ In `$notesStage`, add exact remote `https://github.com/Meow-saucee/intelligent-t
 - Replace rules: ignored `tmp/open-source-release/replace-text.txt` containing exact backslash, slash, and JSON-escaped variants of the real user path mapped to `<project-directory>`.
 
 **Interfaces:**
-- Produces: formal `main` history with unchanged public commit topology/metadata, no raw note paths or accidental Task 4 report, and no personal directory in any reachable blob. Every public-history filtering and equivalence check excludes exactly `findings.md`, `progress.md`, `task_plan.md`, and `.superpowers/sdd/task-4-report.md`.
+- Produces: formal `main` history with unchanged public commit topology/metadata, no raw note paths or accidental Task 4 report, and no personal directory in any blob reachable from `refs/heads/main`. The public release scope is exactly `refs/heads/main`; every public-history filtering and equivalence check excludes exactly `findings.md`, `progress.md`, `task_plan.md`, and `.superpowers/sdd/task-4-report.md`.
+- Host-owned local capture state: preserve all `refs/codex/**` refs unchanged; record each local Codex ref's object ID and object type separately, but do not treat those refs as public outgoing history; they must be excluded from the exact outgoing refspec.
 
 - [ ] **Step 1: Integrate the verified release branch safely**
 
@@ -953,7 +954,7 @@ For each exact approved path `.worktrees/implementation` and `.worktrees/open-so
 
 - [ ] **Step 2: Create and prove the recovery bundle**
 
-Use fixed absent targets `$bundle = tmp/open-source-release/backups/pre-public-rewrite.bundle` and `$restoreCheck = tmp/open-source-release/backups/restore-check`. Record dynamic `N = git rev-list --count HEAD`, current HEAD, `git show-ref`, and `git log --format=raw --date=raw --all` under the ignored evidence directory. Create `git bundle create $bundle --all`, check its exit code, run `git bundle verify $bundle`, then `git clone --no-local -- $bundle $restoreCheck`. Require the restore clone's checked-out HEAD to equal the recorded HEAD, its current-branch commit count to equal `N`, its remote refs to contain both pre-rewrite local branches, and `git ls-tree -r --name-only HEAD` to contain all three note paths. The bundle and restore clone remain ignored/local and are never pushed or removed during this release.
+Use fixed absent targets `$bundle = tmp/open-source-release/backups/pre-public-rewrite.bundle` and `$restoreCheck = tmp/open-source-release/backups/restore-check`. Record dynamic `N = git rev-list --count HEAD`, current HEAD, `git show-ref`, and `git log --format=raw --date=raw --all` under the ignored evidence directory. Create `git bundle create $bundle --all`, check its exit code, run `git bundle verify $bundle`, then `git clone --no-local -- $bundle $restoreCheck`. Require the restore clone's checked-out HEAD to equal the recorded HEAD, its current-branch commit count to equal `N`, its remote refs to contain both pre-rewrite local branches, and `git ls-tree -r --name-only HEAD` to contain all three note paths. The bundle deliberately retains all local recovery refs, including `refs/codex/**`; the bundle and restore clone remain ignored/local and are never pushed or removed during this release.
 
 - [ ] **Step 3: Rehearse the exact filter in a fresh clone**
 
@@ -976,11 +977,11 @@ Fresh-clone the formal repository to the absent `$rehearsal` path with `--no-loc
 
 Create an ignored `verify_history_filter.py` and run it with the original formal repository, rehearsal repository, commit-map path, replacement-rules path, and expected count. For every mapped commit it must compare author/committer names and emails, raw timestamps, full commit message bytes, and parents translated through the commit map; compare complete trees after deleting only `findings.md`, `progress.md`, `task_plan.md`, and `.superpowers/sdd/task-4-report.md` and applying the three exact byte replacements to original blobs. It must fail on any other path/content/topology change.
 
-The same verifier must enumerate all refs and reachable blobs in the rehearsal, reject `refs/original`, `refs/replace`, unexpected remotes, each of the four excluded public-history paths, the real username/path variants, and credential patterns. On a match it may print only rule name, object ID, path, byte length, entropy (where applicable), and a 12-character SHA-256 fingerprint—never matched text. Then, in separate checked gates, run the full tests, compile, install, Windows PowerShell 5.1/7 demos, discovered `bash.exe` POSIX demo, public report tests, and `git diff --check` inside the rehearsal. Store the verifier source SHA-256 and results in ignored evidence.
+The same verifier must enumerate every commit, tree, and blob reachable from `refs/heads/main`; reject `refs/original`, `refs/replace`, unexpected public remotes, each of the four excluded public-history paths, the real username/path variants, and credential patterns within that main-only scope. On a match it may print only rule name, object ID, path, byte length, entropy (where applicable), and a 12-character SHA-256 fingerprint—never matched text. Separately enumerate `refs/codex/**`, record each object ID and object type without reading or publishing matched content, require the refs to remain unchanged, and prove that they are excluded from the exact outgoing refspec `refs/heads/main:refs/heads/main`. Then, in separate checked gates, run the full tests, compile, install, Windows PowerShell 5.1/7 demos, discovered `bash.exe` POSIX demo, public report tests, and `git diff --check` inside the rehearsal. Store the verifier source SHA-256 and results in ignored evidence.
 
 - [ ] **Step 5: Apply the proven filter to the formal repository**
 
-Only after Tasks 9, 10.2, and 10.4 are green, re-fetch the private notes remote and recheck its three hashes, require the formal status to be clean, recheck the filter-helper and replace-rule SHA-256 values, and run the same helper against the formal repository with `-Force` (the helper adds only `--force`; all content rules remain identical). Rename the active branch to `main`, repeat the machine equivalence/scanning gates and the complete local release suite, and confirm the discovered test count/result matches the pre-filter candidate. If filtering fails, do not reset or repair in place; clone the verified bundle into a new absent recovery directory and stop.
+Only after Tasks 9, 10.2, and 10.4 are green, re-fetch the private notes remote and recheck its three hashes, require the formal status to be clean, recheck the filter-helper and replace-rule SHA-256 values, and run the same helper against the formal repository with `-Force` (the helper adds only `--force`; all content rules remain identical). Rename the active branch to `main`, repeat the machine equivalence/scanning gates for every object reachable from `refs/heads/main`, separately re-inventory the unchanged local `refs/codex/**` object IDs and types, prove the exact outgoing refspec contains only `refs/heads/main:refs/heads/main`, run the complete local release suite, and confirm the discovered test count/result matches the pre-filter candidate. If filtering fails, do not reset or repair in place; clone the verified bundle into a new absent recovery directory and stop.
 
 ---
 
@@ -999,7 +1000,7 @@ Using the already-approved browser workflow, reconfirm the visible account is `M
 
 - [ ] **Step 2: Push only sanitized `main` using Git/GCM**
 
-Add the single origin URL, verify it character-for-character, inspect `git status`, `git log`, and `git remote -v`, then run `git push -u origin main`. Never use `--mirror`, `--all`, or a first-push force. If push fails after repository creation, change the incomplete repository to private and stop.
+Add the single origin URL, verify it character-for-character, inspect `git status`, `git log`, and `git remote -v`, then run only `git push -u origin main`, whose exact outgoing refspec is `refs/heads/main:refs/heads/main`. A public push must never use `--all` or `--mirror`, and must never use a first-push force. If push fails after repository creation, change the incomplete repository to private and stop.
 
 - [ ] **Step 3: Configure and visually verify repository metadata**
 
