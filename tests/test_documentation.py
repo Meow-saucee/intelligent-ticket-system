@@ -7,6 +7,28 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 TEST_RESULTS = ROOT / "docs" / "test-results.md"
+PUBLIC_TEXT_FILES = (
+    README,
+    ROOT / "CONTRIBUTING.md",
+    ROOT / "SECURITY.md",
+    *sorted((ROOT / "docs").rglob("*.md")),
+    *sorted((ROOT / "evaluation" / "results").rglob("*.json")),
+)
+
+MANDATORY_README_LOCAL_TARGETS = {
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "docs/设计与协作说明.md",
+    "docs/验收演示步骤.md",
+    "docs/test-results.md",
+    "docs/development/2026-08-08-system-design.md",
+    "docs/development/2026-08-08-implementation-plan.md",
+    "docs/development/2026-08-24-open-source-release-design.md",
+    "docs/development/2026-08-24-open-source-release-plan.md",
+    "evaluation/results/moonshot-v1-8k/2026-08-09-baseline.json",
+    "evaluation/results/moonshot-v1-8k/2026-08-09-hardened.json",
+}
 
 APPROVED_OPENING = """# 智能工单协同系统
 
@@ -33,6 +55,7 @@ REQUIRED_HEADINGS = (
 )
 
 MARKDOWN_LINK = re.compile(r"\]\(([^)]+)\)")
+MARKDOWN_IMAGE = re.compile(r"!\[[^]]*\]\(")
 WINDOWS_USERS_PATH = re.compile(r"(?i)(?<![A-Za-z])[A-Za-z]:[\\/]+Users(?:[\\/]+|\b)")
 
 
@@ -71,6 +94,54 @@ class DocumentationContractTests(unittest.TestCase):
         )
         self.assertIn("```mermaid", readme)
 
+    def test_readme_has_exactly_three_badge_images(self):
+        self.assertEqual(len(MARKDOWN_IMAGE.findall(_read(README))), 3)
+
+    def test_readme_links_every_mandatory_public_target(self):
+        linked_targets = set(_local_link_targets(_read(README)))
+        self.assertTrue(
+            MANDATORY_README_LOCAL_TARGETS.issubset(linked_targets),
+            MANDATORY_README_LOCAL_TARGETS - linked_targets,
+        )
+
+    def test_quick_starts_do_not_use_placeholder_ticket_ids(self):
+        self.assertNotIn("TKT-YYYYMMDD", _read(README))
+
+    def test_powershell_quick_start_derives_alice_ticket_id(self):
+        readme = _read(README)
+        commands = (
+            "$SeedTickets = @(ticket-system --db data/tickets.db list --submitter alice | ConvertFrom-Json)",
+            "$TicketId = $SeedTickets[0].public_id",
+            "ticket-system --db data/tickets.db show $TicketId --history",
+        )
+        positions = [readme.find(command) for command in commands]
+        self.assertNotIn(-1, positions)
+        self.assertEqual(positions, sorted(positions))
+
+    def test_posix_quick_start_derives_alice_ticket_id_without_jq(self):
+        readme = _read(README)
+        assignment = (
+            'TICKET_ID="$(ticket-system --db data/tickets.db list --submitter alice | '
+            "python -c 'import json, sys; print(json.load(sys.stdin)[0][\"public_id\"])')"
+            '"'
+        )
+        show = 'ticket-system --db data/tickets.db show "$TICKET_ID" --history'
+        self.assertIn(assignment, readme)
+        self.assertIn(show, readme)
+        self.assertLess(readme.find(assignment), readme.find(show))
+        self.assertNotIn("jq", readme)
+
+    def test_readme_explains_all_review_actions_accurately(self):
+        readme = _read(README)
+        for contract in (
+            "`confirm` 默认采用原建议，也可以同时提供分类和优先级作为成对覆盖；建议状态记录为 `confirmed`。",
+            "`modify` 必须同时提供最终分类和优先级，建议状态记录为 `modified`。",
+            "`reject` 不改变工单内容、状态、分类、优先级或版本。",
+            "D -->|confirm| E[按原建议或成对覆盖更新工单]",
+        ):
+            with self.subTest(contract=contract):
+                self.assertIn(contract, readme)
+
     def test_readme_avoids_overclaims_and_personal_paths(self):
         readme = _read(README)
         for claim in ("企业级", "生产就绪"):
@@ -80,7 +151,7 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIsNone(WINDOWS_USERS_PATH.search(readme))
 
     def test_public_documentation_avoids_windows_user_directories(self):
-        for path in (README, TEST_RESULTS):
+        for path in PUBLIC_TEXT_FILES:
             with self.subTest(path=path.relative_to(ROOT)):
                 self.assertIsNone(WINDOWS_USERS_PATH.search(_read(path)))
 

@@ -39,7 +39,7 @@ flowchart LR
     A[创建并持久化工单] --> B[AI 分析]
     B --> C[pending 建议]
     C --> D{人工审核}
-    D -->|confirm| E[按原建议更新工单]
+    D -->|confirm| E[按原建议或成对覆盖更新工单]
     D -->|modify| F[按修改结果更新工单]
     D -->|reject| G[工单保持不变]
     E --> H[审计历史]
@@ -47,7 +47,7 @@ flowchart LR
     G --> H
 ```
 
-`analyze` 不直接改工单。`confirm` 采用原建议，`modify` 要求同时给出最终分类和优先级；二者会更新工单分类和优先级，并在工单仍为 `new` 时推进到 `triaged`。`reject` 只把建议标为已拒绝，工单内容、状态、分类、优先级和版本均不改变。三种审核动作都会留下审计事件。
+`analyze` 不直接改工单。`confirm` 默认采用原建议，也可以同时提供分类和优先级作为成对覆盖；建议状态记录为 `confirmed`。`modify` 必须同时提供最终分类和优先级，建议状态记录为 `modified`。`reject` 不改变工单内容、状态、分类、优先级或版本。`confirm` 和 `modify` 会更新工单分类和优先级，并在工单仍为 `new` 时推进到 `triaged`；三种审核动作都会留下审计事件。
 
 ## 快速开始
 
@@ -63,7 +63,9 @@ python -m venv .venv
 python -m pip install .
 ticket-system --db data/tickets.db init
 ticket-system --db data/tickets.db seed
-ticket-system --db data/tickets.db show TKT-YYYYMMDD-0001 --history
+$SeedTickets = @(ticket-system --db data/tickets.db list --submitter alice | ConvertFrom-Json)
+$TicketId = $SeedTickets[0].public_id
+ticket-system --db data/tickets.db show $TicketId --history
 ```
 
 POSIX shell：
@@ -76,10 +78,21 @@ python3 -m venv .venv
 python -m pip install .
 ticket-system --db data/tickets.db init
 ticket-system --db data/tickets.db seed
-ticket-system --db data/tickets.db show TKT-YYYYMMDD-0001 --history
+TICKET_ID="$(ticket-system --db data/tickets.db list --submitter alice | python -c 'import json, sys; print(json.load(sys.stdin)[0]["public_id"])')"
+ticket-system --db data/tickets.db show "$TICKET_ID" --history
 ```
 
-下面是 2026-08-25 在全新虚拟环境执行 `python -m pip install .` 后，按 `init`、两次 `seed`、`show --history` 顺序真实采集的离线 JSON。首次与再次 seed 的计数是确定的；工单公开编号中的 UTC 日期和时间戳会随实际运行时间变化。
+下面的 `offline-example.db` 是 2026-08-25 在另一个全新虚拟环境中执行 `python -m pip install .` 后完成的独立采集，不是上述 `data/tickets.db` 快速开始的延续。采集时执行的完整顺序如下；`list` 返回的 `alice` 工单编号是 `TKT-20260825-0001`，随后将该真实编号传给 `show --history`。
+
+```text
+ticket-system --db offline-example.db init
+ticket-system --db offline-example.db seed
+ticket-system --db offline-example.db seed
+ticket-system --db offline-example.db list --submitter alice
+ticket-system --db offline-example.db show TKT-20260825-0001 --history
+```
+
+对应的 `init`、两次 `seed` 和 `show --history` 离线 JSON 如下。首次与再次 seed 的计数是确定的；工单公开编号中的 UTC 日期和时间戳会随实际运行时间变化。
 
 ```json
 {"database": "offline-example.db", "initialized": true}
